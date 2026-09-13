@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tu Puch Mai bataunga! — Harness</title>
+  <style>
+    :root {
+      --bg: #0f1117; --panel: #171a22; --panel2: #1d212b; --border: #2a2f3a;
+      --text: #e6e8ee; --muted: #8b91a0; --accent: #6c5ce7; --accent2: #4b3fd1;
+      --green: #2ecc71; --user: #6c5ce7;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+    .app { display: grid; grid-template-columns: 240px 1fr; height: 100vh; transition: grid-template-columns 0.25s ease; }
+    .app.collapsed { grid-template-columns: 0px 1fr; }
+    .app.collapsed .sidebar { display: none; }
+
+    /* Left sidebar */
+    .sidebar { background: var(--panel); border-right: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 18px; height: 100vh; overflow-y: auto; }
+    .logo { font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+    .logo .dot { width: 20px; height: 20px; border-radius: 6px; background: linear-gradient(135deg,var(--accent),var(--accent2)); }
+    .newchat { background: var(--panel2); border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 8px; cursor: pointer; text-align: left; font-size: 14px; }
+    .newchat:hover { border-color: var(--accent); }
+    .section-title { font-size: 11px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+    .connector { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; font-size: 14px; color: var(--muted); }
+    .connector .status { width: 8px; height: 8px; border-radius: 50%; background: #444; margin-left: auto; }
+    .connector .status.on { background: var(--green); }
+
+    /* Center */
+    .main { display: flex; flex-direction: column; min-width: 0; height: 100vh; max-height: 100vh; overflow: hidden; position: relative; }
+    .topbar { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--panel); }
+    .toggle-sidebar-btn { background: var(--panel2); border: 1px solid var(--border); color: var(--text); width: 36px; height: 36px; border-radius: 8px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+    .toggle-sidebar-btn:hover { border-color: var(--accent); }
+    .model-select { background: var(--panel2); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 14px; }
+    .spacer { flex: 1; }
+    .gear { background: var(--panel2); border: 1px solid var(--border); color: var(--text); width: 36px; height: 36px; border-radius: 8px; cursor: pointer; font-size: 16px; }
+    .gear:hover { border-color: var(--accent); }
+
+    /* Log & Messages */
+    .log { flex: 1 1 auto; min-height: 0; overflow-y: scroll !important; -webkit-overflow-scrolling: touch; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .log::-webkit-scrollbar { width: 10px; }
+    .log::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+    .log::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 5px; }
+    .log::-webkit-scrollbar-thumb:hover { background: #718096; }
+    
+    .msg { max-width: 75%; padding: 12px 16px; border-radius: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+    .msg.user { align-self: flex-end; background: var(--user); color: #fff; }
+    .msg.bot { align-self: flex-start; background: var(--panel2); border: 1px solid var(--border); }
+    .tool-note { align-self: flex-start; font-size: 12px; color: var(--muted); font-style: italic; }
+
+    /* Thinking Animation */
+    .msg.thinking {
+      align-self: flex-start;
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-style: italic;
+      font-size: 14px;
+    }
+    .typing-dots { display: flex; align-items: center; gap: 4px; }
+    .typing-dots span { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; display: inline-block; animation: pulseDot 1.4s infinite ease-in-out both; }
+    .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes pulseDot {
+      0%, 80%, 100% { transform: scale(0.3); opacity: 0.4; }
+      40% { transform: scale(1.1); opacity: 1; }
+    }
+
+    /* Welcome Card & Starters */
+    .welcome-card {
+      background: linear-gradient(135deg, rgba(108, 92, 231, 0.15), rgba(29, 33, 43, 0.9));
+      border: 1px solid var(--accent);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 8px;
+      align-self: flex-start;
+      max-width: 85%;
+    }
+    .welcome-title { font-weight: 700; font-size: 16px; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+    .welcome-text { font-size: 14px; color: var(--text); line-height: 1.5; margin-bottom: 14px; }
+    .starter-prompts { display: flex; flex-wrap: wrap; gap: 8px; }
+    .prompt-card { background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 8px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; transition: all 0.2s ease; }
+    .prompt-card:hover { border-color: var(--accent); background: var(--panel2); transform: translateY(-1px); }
+
+    /* Thumbs Up / Down Feedback */
+    .msg-footer { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 8px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); }
+    .feedback-btn { background: none; border: 0; cursor: pointer; font-size: 13px; opacity: 0.5; padding: 2px 6px; border-radius: 6px; transition: all 0.15s ease; color: var(--text); }
+    .feedback-btn:hover { opacity: 1; background: var(--panel); }
+    .feedback-btn.active-up { opacity: 1; background: rgba(46, 204, 113, 0.25); color: var(--green); }
+    .feedback-btn.active-down { opacity: 1; background: rgba(231, 76, 60, 0.25); color: #e74c3c; }
+
+    /* Composer */
+    .composer { flex: 0 0 auto; border-top: 1px solid var(--border); padding: 16px 20px; background: var(--panel); }
+    .composer-box { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .composer-row { display: flex; gap: 8px; align-items: center; }
+    .composer input[type=text] { flex: 1; background: transparent; border: 0; color: var(--text); font-size: 15px; outline: none; }
+    .send { background: var(--accent); border: 0; color: #fff; width: 38px; height: 38px; border-radius: 10px; cursor: pointer; font-size: 16px; }
+    .send:hover { background: var(--accent2); }
+    .toggles { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+    .chip { font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); padding: 4px 10px; border-radius: 20px; display: flex; align-items: center; gap: 6px; }
+    .chip .status { width: 7px; height: 7px; border-radius: 50%; background: #444; }
+    .chip .status.on { background: var(--green); }
+    .file-btn { font-size: 12px; color: var(--muted); cursor: pointer; }
+    .file-btn:hover { color: var(--text); }
+    #status { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+    /* Right settings drawer */
+    .drawer { position: fixed; top: 0; right: 0; width: 380px; height: 100vh; background: var(--panel); border-left: 1px solid var(--border); padding: 20px; overflow-y: auto; transform: translateX(100%); transition: transform .25s ease; z-index: 10; }
+    .drawer.open { transform: translateX(0); }
+    .drawer h3 { margin: 0 0 4px; }
+    .drawer .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+    .tab { padding: 8px 4px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; font-size: 14px; }
+    .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 13px; margin-bottom: 6px; }
+    .field input { width: 100%; background: var(--panel2); border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 8px; font-size: 14px; }
+    .field .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .close-drawer { position: absolute; top: 16px; right: 16px; background: none; border: 0; color: var(--muted); font-size: 20px; cursor: pointer; }
+    .save-btn { width: 100%; background: var(--accent); border: 0; color: #fff; padding: 12px; border-radius: 10px; font-size: 15px; cursor: pointer; margin-top: 8px; }
+    .save-btn:hover { background: var(--accent2); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="logo"><span class="dot"></span> Tu Puch Mai bataunga!</div>
+      <button class="newchat" onclick="resetChat()">+ New Chat</button>
+      <div>
+        <div class="section-title">Connectors</div>
+        <div class="connector">🌐 Web Search <span class="status" id="c_web"></span></div>
+        <div class="connector">✉️ Gmail <span class="status" id="c_gmail"></span></div>
+        <div class="connector">📁 Files &amp; RAG <span class="status" id="c_files"></span></div>
+      </div>
+    </aside>
+
+    <!-- CENTER -->
+    <main class="main">
+      <div class="topbar">
+        <button class="toggle-sidebar-btn" onclick="toggleSidebar()" title="Toggle Sidebar">☰</button>
+        <select class="model-select" id="provider">
+          <option value="anthropic" selected>Anthropic · Claude 3.5 Sonnet</option>
+          <option value="grok">Grok · grok-2</option>
+        </select>
+        <div class="spacer"></div>
+        <button class="gear" onclick="toggleDrawer()">⚙️</button>
+      </div>
+
+      <div class="log" id="log"></div>
+
+      <div class="composer">
+        <div class="composer-box">
+          <div class="composer-row">
+            <input id="input" type="text" placeholder="Ask anything, search the web, query Gmail, or drop a file...">
+            <button class="send" onclick="send()">↑</button>
+          </div>
+          <div class="toggles">
+            <span class="chip">🌐 Web <span class="status" id="chip_web"></span></span>
+            <span class="chip">✉️ Gmail <span class="status" id="chip_gmail"></span></span>
+            <input type="file" id="file" style="display:none" onchange="uploadFile()">
+            <span class="file-btn" onclick="document.getElementById('file').click()">📎 Attach file</span>
+            <span id="status"></span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- RIGHT SETTINGS DRAWER -->
+  <div class="drawer" id="drawer">
+    <button class="close-drawer" onclick="toggleDrawer()">×</button>
+    <h3>Workspace Settings</h3>
+    <div class="sub">Keys are stored only in your browser session.</div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('keys')">API Keys</div>
+      <div class="tab" onclick="showTab('gmail')">Connectors &amp; Gmail</div>
+    </div>
+
+    <div class="tab-panel active" id="panel-keys">
+      <div class="field">
+        <label>Anthropic Claude</label>
+        <input id="k_anthropic" type="password" placeholder="sk-ant-..." oninput="refreshStatus()">
+      </div>
+      <div class="field">
+        <label>Grok (xAI)</label>
+        <input id="k_xai" type="password" placeholder="xai-..." oninput="refreshStatus()">
+      </div>
+      <div class="field">
+        <label>Tavily (web search)</label>
+        <input id="k_tavily" type="password" placeholder="tvly-..." oninput="refreshStatus()">
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panel-gmail">
+      <div class="field">
+        <label>Gmail address</label>
+        <input id="k_gmail_address" type="text" placeholder="you@gmail.com" oninput="refreshStatus()">
+      </div>
+      <div class="field">
+        <label>Gmail app password</label>
+        <input id="k_gmail_app_password" type="password" placeholder="16 chars, no spaces" oninput="refreshStatus()">
+        <div class="hint">Read-only inbox access. Requires 2-Step Verification enabled on your Google account.</div>
+      </div>
+    </div>
+
+    <button class="save-btn" onclick="toggleDrawer()">✓ Save &amp; Close</button>
+  </div>
+
+  <script>
+    const log = document.getElementById('log');
+    const input = document.getElementById('input');
+    const status = document.getElementById('status');
+
+    function toggleSidebar() {
+      document.querySelector('.app').classList.toggle('collapsed');
+    }
+
+    function toggleDrawer() { document.getElementById('drawer').classList.toggle('open'); }
+
+    function showTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('panel-' + name).classList.add('active');
+    }
+
+    function getKeys() {
+      const elOpenAI = document.getElementById('k_openai');
+      return {
+        openai: elOpenAI ? elOpenAI.value.trim() : '',
+        anthropic: document.getElementById('k_anthropic').value.trim(),
+        xai: document.getElementById('k_xai').value.trim(),
+        tavily: document.getElementById('k_tavily').value.trim(),
+        gmail_address: document.getElementById('k_gmail_address').value.trim(),
+        gmail_app_password: document.getElementById('k_gmail_app_password').value.trim(),
+      };
+    }
+
+    function saveKeys() {
+      try {
+        localStorage.setItem('omnichat_keys', JSON.stringify(getKeys()));
+      } catch (e) {}
+    }
+
+    function loadKeys() {
+      try {
+        const saved = localStorage.getItem('omnichat_keys');
+        if (saved) {
+          const keys = JSON.parse(saved);
+          if (keys.anthropic) document.getElementById('k_anthropic').value = keys.anthropic;
+          if (keys.xai) document.getElementById('k_xai').value = keys.xai;
+          if (keys.tavily) document.getElementById('k_tavily').value = keys.tavily;
+          if (keys.gmail_address) document.getElementById('k_gmail_address').value = keys.gmail_address;
+          if (keys.gmail_app_password) document.getElementById('k_gmail_app_password').value = keys.gmail_app_password;
+        }
+      } catch (e) {}
+      refreshStatus(false);
+    }
+
+    function refreshStatus(shouldSave = true) {
+      const k = getKeys();
+      if (shouldSave) saveKeys();
+      const webOn = !!k.tavily;
+      const gmailOn = !!(k.gmail_address && k.gmail_app_password);
+      document.getElementById('c_web').classList.toggle('on', webOn);
+      document.getElementById('chip_web').classList.toggle('on', webOn);
+      document.getElementById('c_gmail').classList.toggle('on', gmailOn);
+      document.getElementById('chip_gmail').classList.toggle('on', gmailOn);
+    }
+
+    function initWelcomeMessage() {
+      log.innerHTML = '';
+      const w = document.createElement('div');
+      w.className = 'welcome-card';
+      w.innerHTML = `
+        <div class="welcome-title">🔥 Tu Puch Mai bataunga!</div>
+        <div class="welcome-text">Bolo Malik! Kya puchna hai? Tu puch, mai sab bataunga! 😉<br><span style="color: var(--muted); font-size: 12px;">Ask any question, search the live web, read your emails, or analyze attached files.</span></div>
+        <div class="starter-prompts">
+          <div class="prompt-card" onclick="usePrompt('✉️ What are my most recent emails?')">✉️ Read my emails</div>
+          <div class="prompt-card" onclick="usePrompt('🌐 Search the web for today\\'s top tech news')">🌐 Search the web</div>
+          <div class="prompt-card" onclick="usePrompt('📁 Summarize the uploaded document')">📁 Analyze my attached file</div>
+        </div>
+      `;
+      log.appendChild(w);
+    }
+
+    function usePrompt(txt) {
+      input.value = txt;
+      send();
+    }
+
+    function add(text, cls) {
+      const d = document.createElement('div');
+      d.className = (cls === 'tool') ? 'tool-note' : ('msg ' + cls);
+
+      if (cls === 'bot') {
+        const textNode = document.createElement('div');
+        textNode.textContent = text;
+        d.appendChild(textNode);
+
+        const footer = document.createElement('div');
+        footer.className = 'msg-footer';
+        footer.innerHTML = `
+          <button class="feedback-btn" onclick="rate(this, 'up')" title="Helpful">👍</button>
+          <button class="feedback-btn" onclick="rate(this, 'down')" title="Not Helpful">👎</button>
+        `;
+        d.appendChild(footer);
+      } else {
+        d.textContent = text;
+      }
+
+      log.appendChild(d);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function rate(btn, type) {
+      const parent = btn.parentElement;
+      parent.querySelectorAll('.feedback-btn').forEach(b => {
+        b.classList.remove('active-up', 'active-down');
+      });
+      if (type === 'up') btn.classList.add('active-up');
+      if (type === 'down') btn.classList.add('active-down');
+    }
+
+    async function send() {
+      const message = input.value.trim();
+      if (!message) return;
+      add(message, 'user');
+      input.value = '';
+      status.textContent = 'Thinking...';
+
+      // Animated thinking bubble
+      const thinkDiv = document.createElement('div');
+      thinkDiv.className = 'msg thinking';
+      thinkDiv.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div> Thinking...`;
+      log.appendChild(thinkDiv);
+      log.scrollTop = log.scrollHeight;
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message,
+            provider: document.getElementById('provider').value,
+            keys: getKeys(),
+          }),
+        });
+        const data = await res.json();
+        if (log.contains(thinkDiv)) log.removeChild(thinkDiv);
+
+        if (data.tool_used) add('Used tool: ' + data.tool_used, 'tool');
+        add(data.reply, 'bot');
+      } catch (e) {
+        if (log.contains(thinkDiv)) log.removeChild(thinkDiv);
+        add('Request failed: ' + e, 'bot');
+      }
+      status.textContent = '';
+    }
+
+    async function uploadFile() {
+      const f = document.getElementById('file').files[0];
+      if (!f) return;
+      const fd = new FormData();
+      fd.append('file', f);
+      status.textContent = 'Uploading ' + f.name + '...';
+      try {
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        status.textContent = data.status;
+        document.getElementById('c_files').classList.add('on');
+      } catch (e) {
+        status.textContent = 'Upload failed: ' + e;
+      }
+    }
+
+    async function resetChat() {
+      await fetch('/api/reset', { method: 'POST' });
+      initWelcomeMessage();
+      document.getElementById('c_files').classList.remove('on');
+      status.textContent = '';
+    }
+
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+    window.addEventListener('DOMContentLoaded', () => {
+      loadKeys();
+      initWelcomeMessage();
+    });
+  </script>
+</body>
+</html>

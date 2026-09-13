@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+openai
+anthropic
+pypdf
+tavily-python
+numpy
+requests
+python-multipart
