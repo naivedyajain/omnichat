@@ -5,7 +5,7 @@ import re
 from fastapi import FastAPI, Request, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 
-from backend.core import chat, ingest, retrieve, has_documents
+from backend.core import chat, ingest, retrieve, has_documents, evaluate_response
 from backend.tools import TOOLS, TOOLS_DESCRIPTION
 
 app = FastAPI()
@@ -90,10 +90,14 @@ async def chat_endpoint(request: Request):
     else:
         print("[Chat Step 4] No tool requested by LLM.")
 
+    print(f"[Chat Step 6.5] Triggering cross-LLM evaluation...")
+    eval_result = evaluate_response(provider, message, reply, keys)
+    print(f"[Chat Step 6.5] Evaluation completed: {eval_result}")
+
     HISTORY.append({"role": "assistant", "content": reply})
     print(f"[Chat Step 7] Request cycle complete. Returning response to client.")
     print("=" * 60 + "\n")
-    return {"reply": reply, "tool_used": tool_used}
+    return {"reply": reply, "tool_used": tool_used, "eval": eval_result}
 
 
 @app.post("/api/upload")

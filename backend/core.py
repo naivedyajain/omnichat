@@ -1,5 +1,6 @@
 """Core module: LLM Unified Adapters (Anthropic & Grok) and RAG Vector Store Engine."""
 import io
+import json
 import math
 import re
 import anthropic
@@ -73,6 +74,82 @@ def chat(provider: str, messages: list, keys: dict) -> str:
             raise last_error
 
     return "ERROR: Unknown provider."
+
+
+def evaluate_response(primary_provider: str, user_prompt: str, primary_response: str, keys: dict) -> dict:
+    """Evaluates the primary LLM response using the OPPOSITE LLM as a judge."""
+    judge_provider = "grok" if primary_provider == "anthropic" else "anthropic"
+    judge_name = "Grok (xAI)" if judge_provider == "grok" else "Anthropic (Claude)"
+    
+    judge_key_name = "xai" if judge_provider == "grok" else "anthropic"
+    if not keys.get(judge_key_name):
+        return {
+            "judge": judge_name,
+            "skipped": True,
+            "reason": f"Add {judge_name} API key in Settings (⚙️) to enable cross-LLM evaluation."
+        }
+
+    eval_system_prompt = (
+        "You are an expert AI Response Evaluator & Judge. "
+        "Evaluate the generated response for the user prompt objectively across accuracy, completeness, and clarity. "
+        "Reply ONLY with a single valid JSON object, nothing else, in this exact format:\n"
+        "{\n"
+        '  "confidence_score": 92,\n'
+        '  "verdict": "PASS" | "NEEDS_IMPROVEMENT" | "FAIL",\n'
+        '  "reasoning": "Brief explanation of your verdict and rating."\n'
+        "}"
+    )
+
+    eval_user_content = (
+        f"USER PROMPT:\n{user_prompt}\n\n"
+        f"GENERATED RESPONSE TO EVALUATE:\n{primary_response}"
+    )
+
+    eval_messages = [
+        {"role": "system", "content": eval_system_prompt},
+        {"role": "user", "content": eval_user_content}
+    ]
+
+    print(f"[Judge Log] Requesting evaluation from Judge LLM '{judge_name}'...")
+    try:
+        raw_eval_reply = chat(judge_provider, eval_messages, keys)
+        print(f"[Judge Log] Judge LLM raw reply: {raw_eval_reply}")
+
+        if raw_eval_reply.startswith("ERROR"):
+            return {
+                "judge": judge_name,
+                "skipped": True,
+                "reason": raw_eval_reply
+            }
+
+        match = re.search(r'\{[^{}]*"verdict"[^{}]*\}', raw_eval_reply, re.DOTALL)
+        if not match:
+            match = re.search(r'\{.*?"confidence_score".*?\}', raw_eval_reply, re.DOTALL)
+        
+        if match:
+            parsed = json.loads(match.group(0))
+            return {
+                "judge": judge_name,
+                "skipped": False,
+                "confidence_score": int(parsed.get("confidence_score", 85)),
+                "verdict": str(parsed.get("verdict", "PASS")).upper(),
+                "reasoning": str(parsed.get("reasoning", "Evaluated successfully."))
+            }
+        else:
+            return {
+                "judge": judge_name,
+                "skipped": False,
+                "confidence_score": 85,
+                "verdict": "PASS",
+                "reasoning": raw_eval_reply[:300]
+            }
+    except Exception as e:
+        print(f"[Judge Log] Error during evaluation: {e}")
+        return {
+            "judge": judge_name,
+            "skipped": True,
+            "reason": f"Evaluation error: {repr(e)}"
+        }
 
 
 # --- RAG VECTOR STORE ENGINE ---

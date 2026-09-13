@@ -93,6 +93,31 @@
     .feedback-btn.active-up { opacity: 1; background: rgba(46, 204, 113, 0.25); color: var(--green); }
     .feedback-btn.active-down { opacity: 1; background: rgba(231, 76, 60, 0.25); color: #e74c3c; }
 
+    /* Evaluation Card (LLM as a Judge) */
+    .eval-card {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: rgba(15, 17, 23, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 13px;
+    }
+    .eval-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+    .eval-judge { color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 4px; }
+    .eval-score { background: rgba(108, 92, 231, 0.25); color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .eval-verdict { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; }
+    .eval-verdict.pass { background: rgba(46, 204, 113, 0.25); color: var(--green); }
+    .eval-verdict.needs_improvement { background: rgba(241, 196, 15, 0.25); color: #f1c40f; }
+    .eval-verdict.fail { background: rgba(231, 76, 60, 0.25); color: #e74c3c; }
+    .eval-reasoning { color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .eval-skipped { color: var(--muted); font-size: 12px; font-style: italic; }
+
     /* Composer */
     .composer { flex: 0 0 auto; border-top: 1px solid var(--border); padding: 16px 20px; background: var(--panel); }
     .composer-box { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
@@ -297,7 +322,7 @@
       send();
     }
 
-    function add(text, cls) {
+    function add(text, cls, evalData = null) {
       const d = document.createElement('div');
       d.className = (cls === 'tool') ? 'tool-note' : ('msg ' + cls);
 
@@ -305,6 +330,25 @@
         const textNode = document.createElement('div');
         textNode.textContent = text;
         d.appendChild(textNode);
+
+        if (evalData) {
+          const evalCard = document.createElement('div');
+          evalCard.className = 'eval-card';
+          if (evalData.skipped) {
+            evalCard.innerHTML = `<div class="eval-skipped">⚖️ Judge: ${evalData.judge} &bull; ${evalData.reason}</div>`;
+          } else {
+            const vCls = (evalData.verdict || 'PASS').toLowerCase().replace(/\s+/g, '_');
+            evalCard.innerHTML = `
+              <div class="eval-header">
+                <span class="eval-judge">⚖️ Judge: ${evalData.judge}</span>
+                <span class="eval-score">🎯 Confidence: ${evalData.confidence_score}%</span>
+                <span class="eval-verdict ${vCls}">${evalData.verdict}</span>
+              </div>
+              <div class="eval-reasoning">${evalData.reasoning}</div>
+            `;
+          }
+          d.appendChild(evalCard);
+        }
 
         const footer = document.createElement('div');
         footer.className = 'msg-footer';
@@ -357,7 +401,7 @@
         if (log.contains(thinkDiv)) log.removeChild(thinkDiv);
 
         if (data.tool_used) add('Used tool: ' + data.tool_used, 'tool');
-        add(data.reply, 'bot');
+        add(data.reply, 'bot', data.eval);
       } catch (e) {
         if (log.contains(thinkDiv)) log.removeChild(thinkDiv);
         add('Request failed: ' + e, 'bot');
