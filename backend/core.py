@@ -1,10 +1,81 @@
-"""In-memory RAG: chunk, embed (OpenAI or TF-IDF fallback), retrieve by cosine similarity."""
+"""Core module: LLM Unified Adapters (Anthropic & Grok) and RAG Vector Store Engine."""
+import io
 import math
 import re
+import anthropic
 import numpy as np
 from openai import OpenAI
 from pypdf import PdfReader
-import io
+
+
+# --- LLM ENGINE ---
+
+def chat(provider: str, messages: list, keys: dict) -> str:
+    """Unified chat function routing calls to Anthropic Claude or Grok xAI."""
+    if provider == "grok":
+        key = keys.get("xai")
+        if not key:
+            return "ERROR: No Grok (xAI) API key provided in Settings (⚙️)."
+        client = OpenAI(api_key=key, base_url="https://api.x.ai/v1")
+        grok_models = [
+            "grok-4.6",
+            "grok-4.5",
+            "grok-4.3",
+            "grok-4.20-0309-non-reasoning",
+            "grok-2",
+            "grok-2-1212",
+            "grok-beta",
+            "grok-2-latest",
+        ]
+        errors = []
+        for m in grok_models:
+            try:
+                resp = client.chat.completions.create(model=m, messages=messages)
+                return resp.choices[0].message.content
+            except Exception as e:
+                errors.append(str(e))
+                continue
+        return f"ERROR: Grok API request failed. Please check your xAI API key in Settings (⚙️).\nDetails: {errors[0] if errors else 'Unknown error'}"
+
+    if provider == "anthropic":
+        key = keys.get("anthropic")
+        if not key:
+            return "ERROR: No Anthropic API key provided in Settings (⚙️)."
+        client = anthropic.Anthropic(api_key=key)
+        system = ""
+        convo = []
+        for m in messages:
+            if m["role"] == "system":
+                system = m["content"]
+            else:
+                convo.append({"role": m["role"], "content": m["content"]})
+
+        model_candidates = [
+            "claude-sonnet-4-6",
+            "claude-sonnet-4-5-20250929",
+            "claude-3-5-sonnet-20240620",
+            "claude-3-5-sonnet-20241022",
+        ]
+        last_error = None
+        for model_name in model_candidates:
+            try:
+                resp = client.messages.create(
+                    model=model_name,
+                    max_tokens=1024,
+                    system=system,
+                    messages=convo,
+                )
+                return resp.content[0].text
+            except anthropic.NotFoundError as e:
+                last_error = e
+                continue
+        if last_error:
+            raise last_error
+
+    return "ERROR: Unknown provider."
+
+
+# --- RAG VECTOR STORE ENGINE ---
 
 _STORE = []
 
@@ -26,7 +97,7 @@ def _chunk(text: str, size: int = 800, overlap: int = 100):
 
 
 def _tokenize(text: str):
-    return re.findall(r'\w+', text.lower())
+    return re.findall(r"\w+", text.lower())
 
 
 def _compute_tfidf_vector(tokens: list, vocab: dict, idf: dict):
@@ -42,7 +113,7 @@ def _compute_tfidf_vector(tokens: list, vocab: dict, idf: dict):
 
 def ingest(filename: str, content: bytes, openai_key: str = "") -> str:
     global _STORE
-    _STORE = []  # reset on each new upload for a clean demo
+    _STORE = []
     text = _extract_text(filename, content)
     chunks = _chunk(text)
     if not chunks:
@@ -59,14 +130,13 @@ def ingest(filename: str, content: bytes, openai_key: str = "") -> str:
         except Exception as e:
             print(f"[RAG Log] OpenAI embedding failed ({e}), falling back to local TF-IDF vectorizer...")
 
-    # Fallback TF-IDF embedding (No OpenAI key required!)
     all_tokens = [_tokenize(c) for c in chunks]
     vocab = {}
     for doc in all_tokens:
         for word in doc:
             if word not in vocab:
                 vocab[word] = len(vocab)
-    
+
     num_docs = len(all_tokens)
     idf = {}
     for word, idx in vocab.items():
@@ -102,7 +172,6 @@ def retrieve(query: str, openai_key: str = "", top_k: int = 4) -> str:
         except Exception as e:
             print(f"[RAG Log] OpenAI retrieval failed ({e}), using TF-IDF fallback...")
 
-    # TF-IDF retrieval fallback
     vocab = _STORE[0].get("vocab", {})
     idf = _STORE[0].get("idf", {})
     q_tokens = _tokenize(query)

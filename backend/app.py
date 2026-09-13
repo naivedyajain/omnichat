@@ -1,16 +1,15 @@
-"""FastAPI app: chat, file upload, session memory, tool loop."""
+"""FastAPI Application: Server routes & Tool Loop orchestration."""
 import json
+import os
 import re
 from fastapi import FastAPI, Request, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 
-from app.llm import chat
-from app.rag import ingest, retrieve, has_documents
-from app.tools import TOOLS, TOOLS_DESCRIPTION
+from backend.core import chat, ingest, retrieve, has_documents
+from backend.tools import TOOLS, TOOLS_DESCRIPTION
 
 app = FastAPI()
 
-# In-memory conversation history, keyed by a fixed single-session id for the demo.
 HISTORY = []
 
 
@@ -26,7 +25,7 @@ def _build_system_prompt(keys: dict, context: str) -> str:
 async def chat_endpoint(request: Request):
     body = await request.json()
     message = body.get("message", "")
-    provider = body.get("provider", "openai")
+    provider = body.get("provider", "anthropic")
     keys = body.get("keys", {})
 
     print("\n" + "=" * 60)
@@ -35,7 +34,6 @@ async def chat_endpoint(request: Request):
     print(f"[Chat Step 1] Message: '{message}'")
     print(f"[Chat Step 1] Keys present: {[k for k, v in keys.items() if v]}")
 
-    # RAG: pull context if a document was uploaded.
     context = ""
     if has_documents():
         print("[Chat Step 2] RAG store contains documents. Performing vector search...")
@@ -46,7 +44,6 @@ async def chat_endpoint(request: Request):
 
     system_prompt = _build_system_prompt(keys, context)
 
-    # Build the message list: system + history + new user message.
     HISTORY.append({"role": "user", "content": message})
     messages = [{"role": "system", "content": system_prompt}] + HISTORY
 
@@ -59,7 +56,6 @@ async def chat_endpoint(request: Request):
         print(f"[Chat Step 3] LLM call failed with error: {err_msg}")
         return {"reply": err_msg}
 
-    # Tool loop: if the model asked for a tool, run it and ask again.
     tool_used = None
     if '"tool"' in reply:
         print("[Chat Step 4] Tool call JSON pattern detected in LLM response.")
@@ -81,7 +77,6 @@ async def chat_endpoint(request: Request):
                     result = TOOLS[tool_name](query, keys)
                     print(f"[Chat Step 5] Tool function '{tool_name}' execution complete (result length: {len(result)} chars).")
 
-                    # Feed the tool result back and ask for a final answer.
                     print(f"[Chat Step 6] Sending tool output back to LLM provider '{provider}' for synthesis...")
                     followup = messages + [
                         {"role": "assistant", "content": reply},
@@ -122,4 +117,5 @@ async def reset_endpoint():
     return {"status": "Conversation reset."}
 
 
-app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
+# Mount frontend UI
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
