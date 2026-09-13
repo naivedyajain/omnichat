@@ -5,7 +5,7 @@ import re
 from fastapi import FastAPI, Request, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 
-from backend.core import chat, ingest, retrieve, has_documents, evaluate_response
+from backend.core import chat, ingest, retrieve, has_documents, evaluate_response, run_ai_council_debate
 from backend.tools import TOOLS, TOOLS_DESCRIPTION
 
 app = FastAPI()
@@ -43,6 +43,35 @@ async def chat_endpoint(request: Request):
         print("[Chat Step 2] RAG inactive or no documents stored.")
 
     system_prompt = _build_system_prompt(keys, context)
+
+    # Check for AI Council Debate Mode
+    if "debate" in message.lower():
+        print("[Chat Step 2.D] AI Council Debate Mode triggered!")
+        HISTORY.append({"role": "user", "content": message})
+        messages = [{"role": "system", "content": system_prompt}] + HISTORY
+
+        debate_result = run_ai_council_debate(message, messages, keys)
+        if "error" in debate_result:
+            print(f"[Chat Step 2.D] AI Council Debate error: {debate_result['error']}")
+            return {"reply": f"ERROR: {debate_result['error']}"}
+
+        combined_reply = (
+            f"🏛️ **AI Council Debate Perspectives**\n\n"
+            f"### 🤖 Claude 3.5 Sonnet:\n{debate_result['claude_reply']}\n\n"
+            f"---\n\n"
+            f"### ⚡ Grok-4.6:\n{debate_result['grok_reply']}"
+        )
+        HISTORY.append({"role": "assistant", "content": combined_reply})
+        print("[Chat Step 2.D] AI Council Debate complete. Skipping LLM-as-a-Judge evaluation.")
+        print("=" * 60 + "\n")
+
+        return {
+            "reply": combined_reply,
+            "is_debate": True,
+            "claude_reply": debate_result["claude_reply"],
+            "grok_reply": debate_result["grok_reply"],
+            "eval": None  # Skip Judge evaluation during debates
+        }
 
     HISTORY.append({"role": "user", "content": message})
     messages = [{"role": "system", "content": system_prompt}] + HISTORY

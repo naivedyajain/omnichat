@@ -152,6 +152,49 @@ def evaluate_response(primary_provider: str, user_prompt: str, primary_response:
         }
 
 
+def run_ai_council_debate(user_prompt: str, messages: list, keys: dict) -> dict:
+    """Runs concurrent debate perspectives from both Claude and Grok."""
+    has_anthropic = bool(keys.get("anthropic"))
+    has_xai = bool(keys.get("xai"))
+
+    if not has_anthropic or not has_xai:
+        missing = []
+        if not has_anthropic:
+            missing.append("Anthropic Claude")
+        if not has_xai:
+            missing.append("Grok (xAI)")
+        missing_str = " & ".join(missing)
+        return {
+            "error": f"AI Council Debate requires API keys for both providers. Please add {missing_str} API key in Settings (⚙️)."
+        }
+
+    print("[Council Log] Executing AI Council Debate...")
+    claude_sys = (
+        "You are Claude, a senior AI philosopher & analytical thinker participating in an AI Council debate. "
+        "Present your nuanced, well-structured, and balanced perspective on the topic."
+    )
+    grok_sys = (
+        "You are Grok, a sharp, witty, and direct AI thinker participating in an AI Council debate. "
+        "Present your bold, insightful, and practical perspective on the topic."
+    )
+
+    history = [m for m in messages if m.get("role") != "system"]
+    claude_msgs = [{"role": "system", "content": claude_sys}] + history
+    grok_msgs = [{"role": "system", "content": grok_sys}] + history
+
+    print("[Council Log] Fetching Claude perspective...")
+    claude_reply = chat("anthropic", claude_msgs, keys)
+
+    print("[Council Log] Fetching Grok perspective...")
+    grok_reply = chat("grok", grok_msgs, keys)
+
+    print("[Council Log] AI Council Debate completion successful.")
+    return {
+        "claude_reply": claude_reply,
+        "grok_reply": grok_reply
+    }
+
+
 # --- RAG VECTOR STORE ENGINE ---
 
 _STORE = []
